@@ -1,0 +1,12 @@
+[Unit]
+Description=Force nouveau GPU to performance pstate (core/shader boost, memory reclock disabled via NvMemExec=0)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 5
+ExecStart=/bin/sh -c 'echo 0f > /sys/kernel/debug/dri/0000:01:00.0/pstate'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+--- a/nv.c
++++ b/nv.c
+@@ -2468,7 +2468,7 @@
+
+     nv_printf(NV_DBG_INFO, "NVRM: stopping rc timer\n");
+     nv->rc_timer_enabled = 0;
+-    del_timer_sync(&nvl->rc_timer);
++    timer_delete_sync(&nvl->rc_timer);
+     nv_printf(NV_DBG_INFO, "NVRM: rc timer stopped\n");
+
+     return 0;

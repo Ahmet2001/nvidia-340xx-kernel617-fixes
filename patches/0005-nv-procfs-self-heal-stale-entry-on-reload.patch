@@ -1,0 +1,36 @@
+--- a/nv-procfs.c
++++ b/nv-procfs.c
+@@ -633,6 +633,19 @@
+
+     proc_nvidia = NV_CREATE_PROC_DIR(nv_dir_name, NULL);
+
++    /*
++     * An earlier module load can leave /proc/driver/nvidia behind, because the
++     * unload path does not always tear it down. Modern kernels then WARN and
++     * fail this registration, which aborts module init and leaves the GPU
++     * unusable for every load after the first. Drop the stale subtree and retry
++     * once so a reload can succeed without a reboot.
++     */
++    if (!proc_nvidia)
++    {
++        remove_proc_subtree(nv_dir_name, NULL);
++        proc_nvidia = NV_CREATE_PROC_DIR(nv_dir_name, NULL);
++    }
++
+     if (!proc_nvidia)
+         goto failed;
+
+@@ -682,7 +695,12 @@
+ void nv_unregister_procfs(void)
+ {
+ #if defined(CONFIG_PROC_FS)
+-    nv_procfs_unregister_all(proc_nvidia, proc_nvidia);
++    /* Clear the pointer so a later call cannot act on freed memory. */
++    if (proc_nvidia != NULL)
++    {
++        nv_procfs_unregister_all(proc_nvidia, proc_nvidia);
++        proc_nvidia = NULL;
++    }
+ #endif
+ }
+

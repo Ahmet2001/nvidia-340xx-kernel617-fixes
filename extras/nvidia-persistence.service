@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep the NVIDIA GPU initialised at P0 for headless use
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nvidia-smi -pm 1
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

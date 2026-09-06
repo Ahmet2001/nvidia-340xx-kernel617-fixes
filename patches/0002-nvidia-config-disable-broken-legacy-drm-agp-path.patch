@@ -1,0 +1,11 @@
+--- a/nvidia-config.h
++++ b/nvidia-config.h
+@@ -263,7 +263,7 @@
+ #endif
+
+ /* Determine if the DRM subsystem is usable. */
+-#if defined(CONFIG_DRM) || defined(CONFIG_DRM_MODULE)
++#if 0 /* legacy AGP/drm_legacy_pci_init() path removed: unneeded on PCIe cards, and pulls in <drm/drm_legacy.h>, which newer kernels no longer ship */
+ #define NV_DRM_AVAILABLE
+ #endif
+

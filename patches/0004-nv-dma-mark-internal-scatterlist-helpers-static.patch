@@ -1,0 +1,20 @@
+--- a/nv-dma.c
++++ b/nv-dma.c
+@@ -55,7 +55,7 @@
+     return status;
+ }
+
+-void nv_destroy_dma_map_scatterlist(nv_dma_map_t *dma_map)
++static void nv_destroy_dma_map_scatterlist(nv_dma_map_t *dma_map)
+ {
+ #if defined(NV_SG_TABLE_PRESENT)
+     sg_free_table(&dma_map->sgt);
+@@ -64,7 +64,7 @@
+ #endif
+ }
+
+-void nv_load_dma_map_scatterlist(
++static void nv_load_dma_map_scatterlist(
+     nv_dma_map_t *dma_map,
+     NvU64 *pte_array
+ )

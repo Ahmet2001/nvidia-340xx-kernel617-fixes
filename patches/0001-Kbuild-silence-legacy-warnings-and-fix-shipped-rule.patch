@@ -1,0 +1,23 @@
+--- a/Kbuild
++++ b/Kbuild
+@@ -21,7 +21,10 @@
+ CFLAGS_MODULE := \
+ 	-I$(PWD) \
+ 	$(NVIDIA_CFLAGS) \
+-	-Werror
++	-Werror \
++	-Wno-missing-prototypes \
++	-Wno-missing-declarations \
++	-Wno-empty-body
+
+
+ obj-m := nvidia.o nvidia-uvm.o
+@@ -67,3 +70,8 @@
+ 	nvidia_uvm_page_cache.o \
+ 	nvidia_uvm_utils.o \
+ 	uvm_gpu_ops_tests.o
++
++# Modern kbuild removed the automatic "%_shipped -> %" copy rule, so we
++# need to provide it explicitly for the prebuilt binary blob.
++$(obj)/nv-kernel.o: $(src)/nv-kernel.o_shipped
++	@cp -f $< $@
