@@ -75,13 +75,14 @@ hardware, `already registered` + `EVO Push buffer channel allocation
 failed` every time before the patch, clean module reload and successful
 mode-set every time after.
 
-## The wall that's still there
+## The GLX crash — and getting past it anyway
 
 Even with the kernel module fully working, `nvidia_drv.so` (Xorg's
-closed-source driver blob) segfaults a few seconds after a successful
-mode-set, every time, regardless of how `X` is invoked. `coredumpctl`
-confirms the fault is inside `libnvidia-glcore.so.340.108`. The driver's own
-startup warning explains why:
+closed-source driver blob) would crash: a segfault inside
+`libnvidia-glcore.so.340.108` a few seconds after mode-set in some runs,
+`*** stack smashing detected ***` inside `dlopen("libglx.so", ...)` in
+others. The driver's own startup warning explains why the ABI mismatch
+exists in the first place:
 
 ```
 This server has a video driver ABI version of 25.2 that this
@@ -90,8 +91,43 @@ driver does not officially support.
 
 Xorg's video-driver ABI has moved from what 340.108 targeted (~2014) to 25.2
 today; `-ignoreABI` disables the version *check*, not the actual
-incompatibility. There's no source to patch here — this is as far as a
-kernel-side fix can take you. If you need X, use `nouveau` (see above).
+incompatibility, and the two different crash signatures across otherwise
+identical runs (varying with ASLR) are consistent with real memory
+corruption rather than one deterministic bug. There's no source to patch —
+but a `gdb`-caught backtrace of the second crash showed it happening inside
+`dlopen()` specifically while loading the GLX module, which raised the
+question of what happens if that code path is never entered at all.
+
+Disabling GLX in `xorg.conf` (`Section "Module" / Disable "glx"`) turned out
+to be enough for `Xorg` itself to stop crashing and run stably — confirmed
+with `xclock` actually rendering on the physical display, not just the log
+looking clean. But a real desktop session still crashed immediately,
+`xfce4-session` this time, `SIGABRT` from `__stack_chk_fail`. A backtrace
+pointed at the *identical* root cause reached from a completely different
+direction:
+
+```
+epoxy_has_glx (libepoxy.so.0)
+gdk_display_manager_open_display (libgdk-3.so.0)
+gtk_init_with_args (libgtk-3.so.0)
+main (xfce4-session)
+```
+
+GTK3 doesn't ask Xorg whether GLX is available — every GTK3 app calls
+`epoxy_has_glx()` on startup itself, which `dlopen()`s the GL libraries
+directly, completely bypassing whatever Xorg has disabled. Since
+`xfce4-session`, `xfwm4`, `xfce4-panel`, `Thunar`, and `xfdesktop` are all
+GTK3, a normal desktop launches half a dozen processes that would each
+independently walk straight back into the same corruption.
+
+GDK checks an environment variable before doing any of that probing:
+`GDK_GL=disable`. With that set for the session and GLX disabled in
+`xorg.conf`, a full Xfce desktop came up and stayed up — confirmed on real
+hardware, not just process list: `xfce4-session`, `xfwm4`, `xfce4-panel`,
+`Thunar`, and `xfdesktop` all alive, panel and desktop icons visibly
+rendering, GPU sitting at its idle `P12` state throughout since there's no
+GL work happening. No 3D acceleration, obviously — but a stable, ordinary
+2D desktop on the actual NVIDIA driver, not `nouveau`.
 
 ## Headless: what actually works, and how fast
 

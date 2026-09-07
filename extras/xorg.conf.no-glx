@@ -1,0 +1,82 @@
+# Works around nvidia_drv.so / libglx.so crashing (segfault or "stack
+# smashing detected", depending on run -- both point to the same underlying
+# cause: the driver's GLX code was built against a ~2014 Xorg video-driver
+# ABI, and current servers (tested: Xorg 21.1, ABI 25.2) have moved on far
+# enough that touching it corrupts memory) on Tesla-generation cards running
+# the 340.108 driver.
+#
+# With GLX disabled, nvidia_drv.so degrades to a plain 2D driver instead of
+# crashing: no OpenGL/3D acceleration, but a normal, stable desktop. Confirmed
+# working (visually on real hardware, not just "the X log looks fine").
+#
+# This alone is enough for a single client like xclock, but NOT enough for a
+# real desktop session: any GTK3 app (xfce4-session, xfwm4, xfce4-panel,
+# Thunar, ...) independently probes GLX itself via libepoxy's
+# epoxy_has_glx(), which dlopen()s the GL libraries regardless of what Xorg
+# has disabled, and hits the exact same memory corruption. You also need:
+#
+#     GDK_GL=disable startxfce4
+#
+# (or export GDK_GL=disable in whatever launches your session -- .xprofile,
+# a systemd --user environment.d drop-in, etc.) With both of these in place,
+# a full Xfce desktop -- session, window manager, panel, file manager,
+# desktop icons -- runs stably. Confirmed on real hardware: xfce4-session,
+# xfwm4, xfce4-panel, Thunar, and xfdesktop all alive and responsive after
+# startup, GPU idling normally (P12) since there's no GL load.
+#
+# Generate a baseline with `sudo nvidia-xconfig`, then add the Module section
+# below to the top of the resulting /etc/X11/xorg.conf (or start from this
+# file and adjust Monitor/InputDevice to your hardware).
+
+Section "Module"
+    Disable "glx"
+EndSection
+
+Section "ServerLayout"
+    Identifier     "Layout0"
+    Screen      0  "Screen0"
+    InputDevice    "Keyboard0" "CoreKeyboard"
+    InputDevice    "Mouse0" "CorePointer"
+EndSection
+
+Section "Files"
+EndSection
+
+Section "InputDevice"
+    Identifier     "Mouse0"
+    Driver         "mouse"
+    Option         "Protocol" "auto"
+    Option         "Device" "/dev/psaux"
+    Option         "Emulate3Buttons" "no"
+    Option         "ZAxisMapping" "4 5"
+EndSection
+
+Section "InputDevice"
+    Identifier     "Keyboard0"
+    Driver         "kbd"
+EndSection
+
+Section "Monitor"
+    Identifier     "Monitor0"
+    VendorName     "Unknown"
+    ModelName      "Unknown"
+    HorizSync       28.0 - 33.0
+    VertRefresh     43.0 - 72.0
+    Option         "DPMS"
+EndSection
+
+Section "Device"
+    Identifier     "Device0"
+    Driver         "nvidia"
+    VendorName     "NVIDIA Corporation"
+EndSection
+
+Section "Screen"
+    Identifier     "Screen0"
+    Device         "Device0"
+    Monitor        "Monitor0"
+    DefaultDepth    24
+    SubSection     "Display"
+        Depth       24
+    EndSubSection
+EndSection
