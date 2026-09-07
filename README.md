@@ -126,6 +126,15 @@ and stable, GPU idling normally with no GL load. See
 [`extras/xorg.conf.no-glx`](extras/xorg.conf.no-glx) for a complete,
 annotated config.
 
+> **Start the session properly** — `startx`/`xinit` or a display manager
+> (lightdm, etc.), not a bare `X :1 &` invocation. Those set up a per-session
+> `Xauthority` cookie automatically; a manually-launched `X` with no `-auth`
+> and no cookie runs with **no access control at all** — its socket in
+> `/tmp/.X11-unix/` ends up world-writable, so any other local user or
+> process on the machine can connect, read the screen, and inject input.
+> Fine for a two-minute manual test over SSH, never for anything left
+> running.
+
 No amount of `-ignoreABI`, VT, `-seat`/`-auth` arguments, or plymouth/
 display-manager configuration *around* the crash changed anything (all of
 that was tried first and ruled out — see [Background](#background)); the

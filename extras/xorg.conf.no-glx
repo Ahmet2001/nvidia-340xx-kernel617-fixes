@@ -24,6 +24,12 @@
 # xfwm4, xfce4-panel, Thunar, and xfdesktop all alive and responsive after
 # startup, GPU idling normally (P12) since there's no GL load.
 #
+# Launch the session via startx/xinit or a display manager, not a bare
+# `X :1 &`. Those set up a per-session Xauthority cookie automatically; a
+# manually-started X server with no -auth has NO access control at all --
+# its socket in /tmp/.X11-unix/ ends up world-writable, so any other local
+# user or process can connect, read the screen, and inject input.
+#
 # Generate a baseline with `sudo nvidia-xconfig`, then add the Module section
 # below to the top of the resulting /etc/X11/xorg.conf (or start from this
 # file and adjust Monitor/InputDevice to your hardware).
