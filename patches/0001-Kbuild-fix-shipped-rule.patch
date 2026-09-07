@@ -1,18 +1,6 @@
 --- a/Kbuild
 +++ b/Kbuild
-@@ -21,7 +21,10 @@
- CFLAGS_MODULE := \
- 	-I$(PWD) \
- 	$(NVIDIA_CFLAGS) \
--	-Werror
-+	-Werror \
-+	-Wno-missing-prototypes \
-+	-Wno-missing-declarations \
-+	-Wno-empty-body
-
-
- obj-m := nvidia.o nvidia-uvm.o
-@@ -67,3 +70,8 @@
+@@ -67,3 +67,8 @@
  	nvidia_uvm_page_cache.o \
  	nvidia_uvm_utils.o \
  	uvm_gpu_ops_tests.o

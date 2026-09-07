@@ -7,7 +7,10 @@ series) building and *reloading* cleanly on modern kernels — verified through
 
 This sits on top of [dkosmari/nvidia-340.108-updated](https://github.com/dkosmari/nvidia-340.108-updated),
 which already patches the driver source for kernels 6.0+ but still fails to
-build or hangs the GPU on recent kernels. These five patches close that gap.
+build or hangs the GPU on recent kernels. These patches close that gap —
+and along the way turned up a genuine signature mismatch inside NVIDIA's
+own source between two files that happened to never get cross-checked by
+the compiler (see `0006` below).
 
 ## The problem
 
@@ -44,11 +47,16 @@ downstream symptom of this exact bug (see [Background](#background) below).
 
 | Patch | Fixes |
 |---|---|
-| `0001-Kbuild-*.patch` | `-Werror=missing-prototypes/-declarations/-empty-body` on modern GCC + the kbuild `%_shipped` auto-copy rule removed from recent kernel build scripts |
+| `0001-Kbuild-*.patch` | The kbuild `%_shipped` auto-copy rule removed from recent kernel build scripts, which `nv-kernel.o` (the precompiled resource-manager blob) depends on |
 | `0002-nvidia-config-*.patch` | Disables `nv-drm.c`'s legacy AGP/`drm_legacy_pci_init()` registration path, which pulls in `<drm/drm_legacy.h>` — a header removed from the kernel once DRM's legacy AGP support was dropped. Not needed on PCI Express cards. |
 | `0003-nv-rename-*.patch` | `del_timer_sync()` → `timer_delete_sync()` (renamed in-tree) |
-| `0004-nv-dma-*.patch` | Marks two internally-only-used functions `static` (tidiness; largely superseded by 0001's warning flags, kept because it's the more correct fix for those two specific functions) |
+| `0004-nv-dma-*.patch` | Marks two internally-only-used functions `static` instead of suppressing the warning globally |
 | `0005-nv-procfs-*.patch` | **The real fix.** `nv_unregister_procfs()` could be called without actually removing `/proc/driver/nvidia` cleanly, and `nv_register_procfs()` never allowed for that stale entry existing on the next load. Every load after the first hit the kernel's `proc_register()` WARN, aborted `nvidia_init_module()` immediately, and the GPU never probed. The patch removes the stale subtree and retries once, and clears the module-global pointer on unregister so a second unregister can't act on it either. |
+| `0006-fix-remaining-*.patch` | The rest of `-Wmissing-prototypes`/`-declarations`, fixed per-function instead of suppressed: six functions only ever used within their own file get marked `static`; two (`nvidia_init_module`/`nvidia_exit_module`) get a proper prototype in `nv-proto.h` since they're genuinely called across files. Along the way this surfaces a real bug in NVIDIA's own source: `nv-frontend.c` carried a stale `extern` for `nv_procfs_unregister_all()` declared with **one** parameter, while `nv-procfs.c` defines it with **two** — invisible to the compiler because they're different translation units, and never triggered because `nv-frontend.c` doesn't actually call it. The patch adds the correct two-argument prototype to `nv-proto.h` and drops the stale declaration. |
+| `0007-fix-noop-debug-macros-*.patch` | Four debug-print macros expand to nothing in non-`DEBUG` builds, which is where `-Wempty-body` came from (an `if (...) UVM_DBG_PRINT_RL(...);` with no braces becomes an empty-bodied `if`). Fixed at the source — `do { } while (0)` instead of nothing — which also closes off a dangling-`else` hazard for every other unbraced use of these macros in the ~1000-line file they're used throughout, not just the one call site the warning happened to point at. |
+
+With all seven applied, the driver builds under the **original, unmodified
+`-Werror`** — no warning classes are suppressed anywhere in the tree.
 
 ## Usage
 

@@ -1,0 +1,17 @@
+--- a/nvidia_uvm_common.h
++++ b/nvidia_uvm_common.h
+@@ -73,10 +73,10 @@
+ #define UVM_INFO_PRINT(fmt, ...) \
+     UVM_PRINT_FUNC(pr_info, " " fmt, ##__VA_ARGS__)
+ #else
+-#define UVM_ERR_PRINT(fmt, ...)
+-#define UVM_DBG_PRINT(fmt, ...)
+-#define UVM_DBG_PRINT_RL(fmt, ...)
+-#define UVM_INFO_PRINT(fmt, ...)
++#define UVM_ERR_PRINT(fmt, ...)     do { } while (0)
++#define UVM_DBG_PRINT(fmt, ...)      do { } while (0)
++#define UVM_DBG_PRINT_RL(fmt, ...)   do { } while (0)
++#define UVM_INFO_PRINT(fmt, ...)     do { } while (0)
+ #endif
+
+ //

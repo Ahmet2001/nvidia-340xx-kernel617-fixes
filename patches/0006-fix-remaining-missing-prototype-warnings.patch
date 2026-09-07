@@ -1,0 +1,85 @@
+--- a/nv-proto.h
++++ b/nv-proto.h
+@@ -45,6 +45,10 @@
+ void        nv_procfs_add_warning       (const char *, const char *);
+ int         nv_procfs_add_gpu           (nv_linux_state_t *);
+ void        nv_procfs_remove_gpu        (nv_linux_state_t *);
++void        nv_procfs_unregister_all    (struct proc_dir_entry *, struct proc_dir_entry *);
++
++int         nvidia_init_module          (void);
++void        nvidia_exit_module          (void);
+
+ #if !defined(NV_VMWARE)
+ int         nvidia_mmap                 (struct file *, struct vm_area_struct *);
+--- a/nv-frontend.c
++++ b/nv-frontend.c
+@@ -45,8 +45,6 @@
+ void nvidia_exit_module(void);
+ #endif
+
+-extern void nv_procfs_unregister_all(struct proc_dir_entry *entry);
+-
+ /* EXPORTS to Linux Kernel */
+
+ int          nvidia_frontend_open(struct inode *, struct file *);
+--- a/nvidia_uvm_lite_api.c
++++ b/nvidia_uvm_lite_api.c
+@@ -90,7 +90,7 @@
+ //
+ // Locking: you must hold a read / write lock on the mmap_sem.
+ //
+-struct vm_area_struct *
++static struct vm_area_struct *
+ find_counters_vma(unsigned long long requestedBase,
+     unsigned long long length,
+     struct file *filp)
+--- a/nvidia_uvm_lite.c
++++ b/nvidia_uvm_lite.c
+@@ -204,7 +204,7 @@
+     kmem_cache_free(g_uvmStreamRecordCache, pStream);
+ }
+
+-void _stop_and_destroy_leftover_streams(UvmProcessRecord *processRecord)
++static void _stop_and_destroy_leftover_streams(UvmProcessRecord *processRecord)
+ {
+     struct list_head *pos;
+     struct list_head *safepos;
+@@ -691,7 +691,7 @@
+ //         return SIGBUS.
+ //      3. Otherwise, map in a page from the cache, and allow access.
+ //
+-int _fault_common(struct vm_area_struct *vma, unsigned long vaddr,
++static int _fault_common(struct vm_area_struct *vma, unsigned long vaddr,
+                   struct page **ppage, unsigned vmfFlags)
+ {
+     int retValue = VM_FAULT_SIGBUS;
+@@ -821,11 +821,11 @@
+
+ #if defined(NV_VM_OPERATIONS_STRUCT_HAS_FAULT)
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+-vm_fault_t _fault(struct vm_fault *vmf)
++static vm_fault_t _fault(struct vm_fault *vmf)
+ #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+-int _fault(struct vm_fault *vmf)
++static int _fault(struct vm_fault *vmf)
+ #else
+-int _fault(struct vm_area_struct *vma, struct vm_fault *vmf)
++static int _fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ #endif
+ {
+ #if defined(NV_VM_FAULT_HAS_ADDRESS)
+@@ -882,11 +882,11 @@
+ //
+ #if defined(NV_VM_OPERATIONS_STRUCT_HAS_FAULT)
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+-vm_fault_t _sigbus_fault(struct vm_fault *vmf)
++static vm_fault_t _sigbus_fault(struct vm_fault *vmf)
+ #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+-int _sigbus_fault(struct vm_fault *vmf)
++static int _sigbus_fault(struct vm_fault *vmf)
+ #else
+-int _sigbus_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
++static int _sigbus_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+ #endif
+ {
+     vmf->page = NULL;
