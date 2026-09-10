@@ -12,17 +12,22 @@
 # This alone is enough for a single client like xclock, but NOT enough for a
 # real desktop session: any GTK3 app (xfce4-session, xfwm4, xfce4-panel,
 # Thunar, ...) independently probes GLX itself via libepoxy's
-# epoxy_has_glx(), which dlopen()s the GL libraries regardless of what Xorg
-# has disabled, and hits the exact same memory corruption. You also need:
+# epoxy_has_glx(), which dlopen()s the client-side libGL.so.1 regardless of
+# what Xorg has disabled, and hits the exact same memory corruption -- this
+# driver's installer doesn't just install its own libGL.so.1, it *deletes*
+# Mesa's original from the multiarch directory (no glvnd coexistence, since
+# this driver predates glvnd), so that dlopen() has nowhere else to go.
 #
-#     GDK_GL=disable startxfce4
-#
-# (or export GDK_GL=disable in whatever launches your session -- .xprofile,
-# a systemd --user environment.d drop-in, etc.) With both of these in place,
-# a full Xfce desktop -- session, window manager, panel, file manager,
-# desktop icons -- runs stably. Confirmed on real hardware: xfce4-session,
+# Run fix-libgl-crash.sh (same directory) once to fix that system-wide --
+# reinstalls Mesa's libgl1 and removes this driver's colliding copy from
+# ldconfig's search path. With both of these in place, a full Xfce desktop
+# -- session, window manager, panel, file manager, desktop icons -- runs
+# stably. Confirmed on real hardware across a clean reboot: xfce4-session,
 # xfwm4, xfce4-panel, Thunar, and xfdesktop all alive and responsive after
-# startup, GPU idling normally (P12) since there's no GL load.
+# startup, GPU idling normally (P12) since there's no GL load, zero
+# crashes. No per-session environment variable (e.g. GDK_GL=disable, an
+# earlier narrower workaround) is needed once the file collision itself is
+# fixed.
 #
 # Launch the session via startx/xinit or a display manager, not a bare
 # `X :1 &`. Those set up a per-session Xauthority cookie automatically; a

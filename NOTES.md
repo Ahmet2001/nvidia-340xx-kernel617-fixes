@@ -129,6 +129,54 @@ rendering, GPU sitting at its idle `P12` state throughout since there's no
 GL work happening. No 3D acceleration, obviously — but a stable, ordinary
 2D desktop on the actual NVIDIA driver, not `nouveau`.
 
+That held up until the next clean reboot, when `xfwm4` itself turned out to
+still be crashing — `GDK_GL` only stops probing that goes through *GDK's*
+`gdk_display_manager_open_display()`; the window manager calls
+`epoxy_has_glx()` directly for its own compositor-capability check, a
+different call path GDK's env var never touches:
+
+```
+dlopen (libc.so.6)
+epoxy_has_glx (libepoxy.so.0)
+n/a (xfwm4)
+main (xfwm4)
+```
+
+Same crash, same root cause, reached a third way — which meant the actual
+fix couldn't live at the per-application layer at all. It had to be *what
+`libGL.so.1` resolves to*, system-wide, since that's the one thing every one
+of these call paths shares.
+
+That's where it got interesting: `/usr/lib/x86_64-linux-gnu/libGL.so.1` —
+Mesa's file, still owned by the `libgl1` package according to `dpkg -S` —
+didn't exist on disk anymore. The 340.108 installer doesn't just add its own
+copy, it **deletes** Mesa's, presumably because it predates glvnd (the
+mechanism that lets an NVIDIA driver and Mesa's implementation coexist on
+the same system) and its installer logic assumes it's the only GL provider
+around to manage. `apt-get install --reinstall libgl1` gets Mesa's file
+back — but simply removing NVIDIA's colliding symlinks at `/usr/lib/libGL.so`
+and `/usr/lib/libGL.so.1` didn't stick: **`ldconfig` recreates them**. It
+scans every `.so*` file in its trusted directories (`/lib`, `/usr/lib`, and
+whatever `/etc/ld.so.conf.d/*.conf` lists), reads each one's embedded
+SONAME, and (re)creates the matching bare-SONAME symlink if one's missing —
+so as long as NVIDIA's actual `libGL.so.340.108` sat in `/usr/lib` declaring
+itself as `libGL.so.1`, the very next `ldconfig` run (including the one
+`dpkg`/`apt` trigger automatically) put the broken symlink right back,
+regardless of what got deleted by hand a moment earlier.
+
+The fix that actually holds: move `libGL.so.340.108` itself out of any
+directory `ldconfig` scans (`extras/fix-libgl-crash.sh` moves it to
+`/opt/nvidia-legacy-gl-disabled/`, nothing deleted), then `ldconfig` again.
+With nothing left claiming the `libGL.so.1` SONAME except Mesa's restored
+file, `epoxy_has_glx()` — called from GDK, from `xfwm4` directly, from
+anywhere — resolves to a completely ordinary, correctly-built library and
+just... works. `GDK_GL=disable` turned out to be unnecessary once this was
+fixed: confirmed by removing it from `.xinitrc` and rebooting — full desktop,
+`xfwm4` included, zero crashes, without a single per-application workaround.
+Nothing else this driver provides (`nvidia-smi`, the kernel module, the
+CUDA driver API) touches `libGL.so.1` at all, so none of it was affected by
+any of this.
+
 ## Headless: what actually works, and how fast
 
 With no X in the picture, the kernel module is solid: `nvidia-smi`,

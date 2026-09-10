@@ -103,26 +103,41 @@ memory. That's binary-only code with no source available, so it's not
 fixable directly — but it turns out to be fully avoidable, and the result is
 a normal, stable desktop with no GL/3D acceleration:
 
-1. **Disable GLX in Xorg itself** — add to `xorg.conf`:
+Two separate things need fixing, because two separate files are broken:
+
+1. **Xorg's own GLX extension module** (`/usr/lib/xorg/modules/extensions/libglx.so`,
+   also part of this driver) crashes when Xorg itself loads it. Disable it
+   in `xorg.conf`:
    ```
    Section "Module"
        Disable "glx"
    EndSection
    ```
-2. **Stop GTK3 apps from probing it independently.** Disabling GLX in Xorg
-   isn't enough on its own: `xfce4-session`, `xfwm4`, `xfce4-panel`, and
-   every other GTK3 app call `epoxy_has_glx()` (via GDK) on startup
-   regardless of what Xorg has disabled, which `dlopen()`s the GL libraries
-   and hits the exact same corruption. Set:
+2. **The client-side `libGL.so.1`** that every OpenGL-touching *application*
+   resolves to system-wide is a second, separate NVIDIA file — and this
+   driver's installer doesn't just install it, it **deletes Mesa's own
+   `libGL.so.1`** from the multiarch directory rather than coexisting with
+   it (this driver predates glvnd, the mechanism that normally lets an
+   NVIDIA driver and Mesa share a system safely). So even with GLX disabled
+   in Xorg, any GTK3 app — `xfwm4`, `xfce4-panel`, `Thunar`, anything —
+   independently calls `epoxy_has_glx()` on startup, which `dlopen()`s
+   *this* file directly, and hits the exact same corruption from a
+   completely different code path. Fix this one at the system level, once,
+   and it's fixed for every application:
    ```
-   export GDK_GL=disable
+   sudo ./extras/fix-libgl-crash.sh
    ```
-   before starting your session (`.xprofile`, wherever `startxfce4` gets
-   launched from, etc.).
+   which reinstalls Mesa's `libgl1` package and removes this driver's
+   colliding copy from `ldconfig`'s search path (see the script for exactly
+   what it does and why — nothing is deleted, NVIDIA's original file is
+   moved aside, not removed).
 
-With both in place: **confirmed working on real hardware** — full Xfce
-session (`xfce4-session`, `xfwm4`, `xfce4-panel`, `Thunar`, `xfdesktop`) up
-and stable, GPU idling normally with no GL load. See
+With both in place: **confirmed working on real hardware, across a clean
+reboot** — full Xfce session (`xfce4-session`, `xfwm4`, `xfce4-panel`,
+`Thunar`, `xfdesktop`) up and stable, GPU idling normally with no GL load,
+zero crashes. `GDK_GL=disable` (an earlier, narrower workaround that only
+covered GDK-based apps and had to be set per-session) is **not needed**
+once the system-wide file collision is fixed. See
 [`extras/xorg.conf.no-glx`](extras/xorg.conf.no-glx) for a complete,
 annotated config.
 
