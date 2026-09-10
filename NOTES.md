@@ -177,6 +177,41 @@ Nothing else this driver provides (`nvidia-smi`, the kernel module, the
 CUDA driver API) touches `libGL.so.1` at all, so none of it was affected by
 any of this.
 
+## The screen locker crashing (unrelated to the driver)
+
+Once the desktop was stable, one more thing turned out to be broken:
+`light-locker` (XFCE's default screen locker on this distro) was dying on
+every launch, `SIGTRAP`, so the screen never actually locked — idle timeout
+or the manual "Lock" action both did nothing. `coredumpctl` traced it to a
+deliberate `g_error()` inside `gs_monitor_new()`, disassembled straight to
+its format string:
+
+```
+Environment variable XDG_SESSION_PATH not set. Is LightDM running?
+```
+
+`light-locker` is, as its own name and package description say, built
+specifically for LightDM: it reads `XDG_SESSION_PATH` to talk to LightDM's
+D-Bus session interface for the actual lock/unlock handoff, and treats that
+variable being unset as a fatal condition (`g_error()` is always fatal in
+glib — it raises `SIGTRAP` via `G_BREAKPOINT`, not just a warning). This
+machine was never running LightDM or any display manager at all — the whole
+setup here is deliberately `tty1` autologin + `startx` (see the reboot/
+autologin work above), so that variable was never going to be set, on any
+boot, no matter what.
+
+Fix: swap it for `xfce4-screensaver` — XFCE's own screensaver/locker,
+which doesn't assume any particular display manager and talks to Xorg and
+the session directly. `apt purge light-locker light-locker-settings &&
+apt install xfce4-screensaver` was the whole change; XFCE's `xflock4`
+dispatch script already tries `xfce4-screensaver-command` before any of the
+other lockers it knows about, and `xfce4-screensaver` ships its own
+`/etc/xdg/autostart` entry, so no session/autostart configuration needed
+changing at all. Confirmed across a clean reboot: `xfce4-screensaver`
+autostarts, `xfce4-screensaver-command --lock` actually locks (queried
+active, process stays alive, zero coredumps) and `--deactivate` actually
+unlocks.
+
 ## Headless: what actually works, and how fast
 
 With no X in the picture, the kernel module is solid: `nvidia-smi`,
